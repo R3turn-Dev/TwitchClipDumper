@@ -4,7 +4,6 @@ import requests
 import pickle
 from datetime import datetime
 
-
 parser = argparse.ArgumentParser(description="Download Twitch clips.")
 parser.add_argument("channel", nargs="?", help="Channel ID")
 parser.add_argument("--client-id", nargs="?", help="Client ID")
@@ -15,6 +14,7 @@ def main(channel, client_id, token):
     clips = []
 
     _cursor, _len, _data = fetcher(channel, client_id, token)
+    clips += _data
 
     while _len == 100:
         _cursor, _len, _data = fetcher(channel, client_id, token, pagination=_cursor)
