@@ -1,0 +1,1 @@
+ALL_CLIPS = "https://api.twitch.tv/kraken/clips/top?channel={channel}&period=all&limit=100"
