@@ -41,7 +41,7 @@ def main(channel, client_id, token):
             int(datetime.strptime(c['created_at'], "%Y-%m-%dT%H:%M:%SZ").timestamp()),
             c['curator']['name'] if c['curator']['name'] == c['curator']['display_name'] else
             c['curator']['display_name'] + f"({c['curator']['name']})",
-            c['tracking_id'], c['slug']
+            c['tracking_id'], c['slug'], c['thumbnails']['tiny'].split("-preview", 1)[0].split("/")[-1]
             ) for c in clips
         ]
 
@@ -62,21 +62,18 @@ def main(channel, client_id, token):
 
 
 def _isolated_downloader(a):
-    channel, title, time, naming, tracking, slug = a
+    channel, title, time, naming, tracking, slug, endpoint = a
 
     try:
         fname = VALID_FILENAME(f"{title}-{slug}.mp4")
         path = f"{channel}/{fname}"
         if exists(path) and getsize(path) > 1024:
-            print("Ignoring {} due to exist".format(naming))
+            print("Ignoring {} due to exist".format(slug))
             return
 
-        req = requests.get("https://clips-media-assets2.twitch.tv/AT-cm%7C" + tracking + ".mp4")
+        req = requests.get("https://clips-media-assets2.twitch.tv/" + endpoint + ".mp4")
         if len(req.content) < 1024:
-            req = requests.get("https://clips-media-assets2.twitch.tv/" + str(tracking) + ".mp4")
-            if len(req.content) < 1024:
-                print("Empty response", title, naming, tracking)
-                # return
+            print("Empty response", title, naming, tracking)
 
         open(f"{channel}/{fname}", "wb").write(req.content)
         os.utime(f"{channel}/{fname}", (time, time))
