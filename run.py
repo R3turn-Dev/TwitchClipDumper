@@ -19,9 +19,12 @@ def main(channel, client_id, token):
     _cursor, _len, _data = fetcher(channel, client_id, token)
     clips += _data
 
-    while _len == 100:
+    while _len > 0:
         _cursor, _len, _data = fetcher(channel, client_id, token, pagination=_cursor)
         clips += _data
+
+        if _cursor == "" or _data[-1]["views"] < 10:
+            break
 
     print(len(clips), "clips found.")
 
