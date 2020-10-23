@@ -1,9 +1,12 @@
-import os
 import argparse
-import requests
+import multiprocessing
+import os
 import pickle
 import traceback
 from datetime import datetime
+from os.path import exists, getsize
+
+import requests
 
 parser = argparse.ArgumentParser(description="Download Twitch clips.")
 parser.add_argument("channel", nargs="?", help="Channel ID")
@@ -34,38 +37,52 @@ def main(channel, client_id, token):
 
     downloading = [
         (
-            c['title'],
+            channel, c['title'],
             int(datetime.strptime(c['created_at'], "%Y-%m-%dT%H:%M:%SZ").timestamp()),
             c['curator']['name'] if c['curator']['name'] == c['curator']['display_name'] else
             c['curator']['display_name'] + f"({c['curator']['name']})",
-            f"https://clips-media-assets2.twitch.tv/AT-cm%7C{c['tracking_id']}.mp4"
-        ) for c in clips
-    ]
+            c['tracking_id'], c['slug']
+            ) for c in clips
+        ]
 
     open(f"urls-{channel}.txt", "w", encoding="UTF-8").write(
         "\n".join([
-            VALID_FILENAME(f"{channel}-{c[0]}-{c[1]}.mp4") for c in downloading
-        ])
-    )
+            VALID_FILENAME(f"{channel}-{c[-1]}-{c[0]}-{c[1]}.mp4") for c in downloading
+            ])
+        )
 
     if not channel in os.listdir(os.getcwd()):
         os.mkdir(channel)
 
-    for title, time, naming, uri in downloading:
-        try:
-            fname = VALID_FILENAME(f"{title}-{naming}.mp4")
+    pool = multiprocessing.Pool(min(16, multiprocessing.cpu_count()))
+    try:
+        pool.map(_isolated_downloader, downloading)
+    except KeyboardInterrupt:
+        pool.close()
 
-            req = requests.get(uri)
-            if req.content:
-                open(f"{channel}/{fname}", "wb").write(req.content)
 
-                os.utime(f"{channel}/{fname}", (time, time))
+def _isolated_downloader(a):
+    channel, title, time, naming, tracking, slug = a
 
-            else:
-                print("Empty response", title, naming, uri)
+    try:
+        fname = VALID_FILENAME(f"{title}-{slug}.mp4")
+        path = f"{channel}/{fname}"
+        if exists(path) and getsize(path) > 1024:
+            print("Ignoring {} due to exist".format(naming))
+            return
 
-        except:
-            print("Error on", title, naming, uri, traceback.format_exc())
+        req = requests.get("https://clips-media-assets2.twitch.tv/AT-cm%7C" + tracking + ".mp4")
+        if len(req.content) < 1024:
+            req = requests.get("https://clips-media-assets2.twitch.tv/" + str(tracking) + ".mp4")
+            if len(req.content) < 1024:
+                print("Empty response", title, naming, tracking)
+                # return
+
+        open(f"{channel}/{fname}", "wb").write(req.content)
+        os.utime(f"{channel}/{fname}", (time, time))
+
+    except:
+        print("Error on", title, naming, tracking, traceback.format_exc())
 
 
 def fetcher(channel, client_id, token, pagination: str = None):
@@ -77,10 +94,11 @@ def fetcher(channel, client_id, token, pagination: str = None):
             "Accept": "vnd.twitchtv.v5+json",
             "Authorization": "Bearer " + token,
             "Client-ID": client_id
-        }
-    )
+            }
+        )
 
     data = resp.json()
+    print(len(data["clips"]), data["_cursor"], data["clips"][0]["slug"], data["clips"][-1]["views"])
 
     return data["_cursor"], len(data["clips"]), data["clips"]
 
